@@ -93,15 +93,15 @@ static Json::array json_report_critical_paths(const Context *ctx)
     auto critPathsJson = Json::array();
 
     // Critical paths
-    for (auto &report : ctx->timing_result.clock_paths) {
+    for (auto &report : ctx->timing_result.criti_clock_paths) {
 
         critPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, report.second.clock_pair.start)},
                                               {"to", clock_event_name(ctx, report.second.clock_pair.end)},
                                               {"path", report_critical_path(report.second)}}));
     }
 
-    // Cross-domain paths
-    for (auto &report : ctx->timing_result.xclock_paths) {
+    // Cross-domain critical paths
+    for (auto &report : ctx->timing_result.criti_xclock_paths) {
         critPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, report.clock_pair.start)},
                                               {"to", clock_event_name(ctx, report.clock_pair.end)},
                                               {"path", report_critical_path(report)}}));
@@ -109,6 +109,84 @@ static Json::array json_report_critical_paths(const Context *ctx)
 
     return critPathsJson;
 }
+
+static Json::array json_report_timing_paths(const Context *ctx, bool is_setup)
+{
+
+    auto report_timing_path = [ctx](const CriticalPath &report, const bool is_single_domain_, const bool is_setup_) {
+        Json::array pathJson;
+
+        for (const auto &segment : report.segments) {
+
+            const auto &driver = ctx->cells.at(segment.from.first);
+            const auto &sink = ctx->cells.at(segment.to.first);
+
+            auto fromLoc = ctx->getBelLocation(driver->bel);
+            auto toLoc = ctx->getBelLocation(sink->bel);
+
+            auto fromJson = Json::object({{"cell", segment.from.first.c_str(ctx)},
+                                          {"port", segment.from.second.c_str(ctx)},
+                                          {"loc", Json::array({fromLoc.x, fromLoc.y})}});
+
+            auto toJson = Json::object({{"cell", segment.to.first.c_str(ctx)},
+                                        {"port", segment.to.second.c_str(ctx)},
+                                        {"loc", Json::array({toLoc.x, toLoc.y})}});
+
+            auto segmentJson = Json::object({
+                    {"delay", ctx->getDelayNS(segment.delay)},
+                    {"from", fromJson},
+                    {"to", toJson},
+            });
+
+            segmentJson["type"] = CriticalPath::Segment::type_to_str(segment.type);
+            if (segment.type == CriticalPath::Segment::Type::ROUTING) {
+                segmentJson["net"] = segment.net.c_str(ctx);
+            }
+
+            pathJson.push_back(segmentJson);
+        }
+
+        return pathJson;
+    };
+
+    auto timingPathsJson = Json::array();
+
+    // Timing paths
+    if(is_setup)
+    {
+        for (auto &report : ctx->timing_result.clock_paths_setup)
+            for (auto &timing_path : report.second)
+                timingPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, timing_path.clock_pair.start)},
+                                                      {"to", clock_event_name(ctx, timing_path.clock_pair.end)},
+                                                      {"path", report_timing_path(timing_path, true, true)},
+                                                      {"slack", timing_path.slack}}));
+
+        // Cross-domain timing paths
+        for (auto &report : ctx->timing_result.xclock_paths_recovery)
+            timingPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, report.clock_pair.start)},
+                                                  {"to", clock_event_name(ctx, report.clock_pair.end)},
+                                                  {"path", report_timing_path(report, false, false)}}));
+    }
+    else
+    {
+        for (auto &report : ctx->timing_result.clock_paths_hold)
+            for (auto &timing_path : report.second)
+                timingPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, timing_path.clock_pair.start)},
+                                                      {"to", clock_event_name(ctx, timing_path.clock_pair.end)},
+                                                      {"path", report_timing_path(timing_path, true, false)},
+                                                      {"slack", timing_path.slack}}));
+
+        // Cross-domain timing paths
+        for (auto &report : ctx->timing_result.xclock_paths_removal)
+            timingPathsJson.push_back(Json::object({{"from", clock_event_name(ctx, report.clock_pair.start)},
+                                                  {"to", clock_event_name(ctx, report.clock_pair.end)},
+                                                  {"path", report_timing_path(report, false, false)}}));
+    }
+
+
+    return timingPathsJson;
+}
+
 
 static Json::array json_report_detailed_net_timings(const Context *ctx)
 {
@@ -236,7 +314,10 @@ void Context::writeJsonReport(std::ostream &out) const
     }
 
     Json::object jsonRoot{
-            {"utilization", util_json}, {"fmax", fmax_json}, {"critical_paths", json_report_critical_paths(this)}};
+            {"utilization", util_json}, {"fmax", fmax_json}, 
+            {"critical_paths", json_report_critical_paths(this)}, 
+            {"setup_analysis", json_report_timing_paths(this, true)},
+            {"hold_analysis", json_report_timing_paths(this, false)}};
 
     if (detailed_timing_report) {
         jsonRoot["detailed_net_timings"] = json_report_detailed_net_timings(this);

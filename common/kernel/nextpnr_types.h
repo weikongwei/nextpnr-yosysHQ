@@ -460,8 +460,26 @@ struct CriticalPath
     // if sum[segments.delay] > max_delay this is a setup/max violation
     delay_t max_delay;
 
+    bool is_setup = true;
+    delay_t slack = std::numeric_limits<delay_t>::max();  // in ps units
+
     // Individual path segments
     std::vector<Segment> segments;
+
+    // delay_t setupSlack() const {
+    //     delay_t sum = 0;
+    //     for (const auto &seg : segments)
+    //             sum += seg.delay;
+    //     return max_delay - sum;
+    // }
+
+    // delay_t holdSlack() const {
+    //     delay_t sum = 0;
+    //     for (const auto &seg : segments)
+    //             sum += seg.delay;
+    //     return sum;
+    // }
+
 };
 
 // Holds timing information of a single source to sink path of a net
@@ -480,11 +498,20 @@ struct TimingResult
     // Achieved and target Fmax for all clock domains
     dict<IdString, ClockFmax> clock_fmax;
     // Single domain critical paths
-    dict<IdString, CriticalPath> clock_paths;
+    dict<IdString, CriticalPath> criti_clock_paths;
     // Cross-domain critical paths
-    std::vector<CriticalPath> xclock_paths;
+    std::vector<CriticalPath> criti_xclock_paths;
     // Domains with no interior paths
     pool<IdString> empty_paths;
+
+    // All single domain setup analysis
+    dict<IdString, std::vector<CriticalPath>> clock_paths_setup;
+    // All cross-domain recovery analysis
+    std::vector<CriticalPath> xclock_paths_recovery;
+    // All single domain hold analysis
+    dict<IdString, std::vector<CriticalPath>> clock_paths_hold;
+    // All cross-domain removal analysis
+    std::vector<CriticalPath> xclock_paths_removal;
 
     // Detailed net timing data
     dict<IdString, std::vector<NetSinkTiming>> detailed_net_timings;

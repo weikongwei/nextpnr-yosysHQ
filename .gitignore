@@ -44,3 +44,6 @@ install_manifest.txt
 *.phys
 *.dcp
 *.bit
+test_cases
+build
+install

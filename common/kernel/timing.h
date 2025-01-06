@@ -86,6 +86,7 @@ struct TimingAnalyser
 
     float get_criticality(CellPortKey port) const { return ports.at(port).worst_crit; }
     float get_setup_slack(CellPortKey port) const { return ports.at(port).worst_setup_slack; }
+    float get_hold_slack(CellPortKey port) const { return ports.at(port).worst_hold_slack; }
     float get_domain_setup_slack(CellPortKey port) const
     {
         delay_t slack = std::numeric_limits<delay_t>::max();
@@ -129,7 +130,7 @@ struct TimingAnalyser
     // longest_path indicate whether to follow the longest or shortest path from endpoint to startpoint
     // longest paths are interesting for setup violations and shortest paths are interesting for hold violations
     CriticalPath build_critical_path_report(domain_id_t domain_pair, CellPortKey endpoint, bool longest_path);
-    void build_crit_path_reports();
+    void build_timing_path_reports();
     void build_slack_histogram_report();
 
     std::vector<CriticalPath> get_min_delay_violations();
@@ -138,6 +139,8 @@ struct TimingAnalyser
 
     // get the N worst endpoints for a given domain pair
     std::vector<CellPortKey> get_worst_eps(domain_id_t domain_pair, int count);
+    // get all endpoints for a given domain pair
+    std::vector<CellPortKey> get_eps(domain_id_t domain_pair);
 
     // Set arrival/required times if more/less than the current value
     void set_arrival_time(CellPortKey target, domain_id_t domain, DelayPair arrival, int path_length,
@@ -152,13 +155,14 @@ struct TimingAnalyser
     struct ArrivReqTime
     {
         DelayPair value;
-        CellPortKey bwd_min, bwd_max;
+        CellPortKey bwd_min, bwd_max;   // backwards traversal
         int path_length;
     };
     // Data per port-domain tuple
     struct PortDomainPairData
     {
-        delay_t setup_slack = std::numeric_limits<delay_t>::max(), hold_slack = std::numeric_limits<delay_t>::max();
+        delay_t setup_slack = std::numeric_limits<delay_t>::max(), 
+        hold_slack = std::numeric_limits<delay_t>::max();
         int max_path_length = 0;
         float criticality = 0;
     };
@@ -196,7 +200,7 @@ struct TimingAnalyser
         // per domain timings
         dict<domain_id_t, ArrivReqTime> arrival;
         dict<domain_id_t, ArrivReqTime> required;
-        dict<domain_id_t, PortDomainPairData> domain_pairs;
+        dict<domain_id_t, PortDomainPairData> domain_pairs; // cell timing arcs to (outputs)/from (inputs) from this port
         // cell timing arcs to (outputs)/from (inputs)  from this port
         std::vector<CellArc> cell_arcs;
         // routing delay into this port (input ports only)
